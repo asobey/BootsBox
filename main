@@ -1,0 +1,198 @@
+//Project: Cat Box Controller
+//Author: Alexander R Sobey
+//Date: 2016.04.23
+volatile int state = LOW;
+volatile int flagSmell = LOW;
+volatile int flagRelay = LOW;
+volatile int flagBinCount = LOW;
+volatile int flagRelayClean = LOW;
+int count = 0;            // variable to store number of presses	
+long time = 0;	          // used for debounce
+long debounce = 500;	  // how many ms to "debounce"
+const int rLED =  P8_2;     // smellOut indicator pin
+const int yLED = P3_7;      // program running indicator pin
+const int gLED = P4_0;      // press indicator (stays on or off
+const int buttonAnalog = P2_3;  //pressure plate and breadboard button
+const int buttonAnalog2 = P2_0;    //breadboard button for clean only
+const int smellOut = P1_6;   // release odor
+const int boxRelay = P3_5;  // turn on automatic cleaning cat box
+const int boxRelayLED = P3_6;  //boxRelay indicator
+
+const int numPins = 5;     //num of BIN counter pins
+byte pins[] = {6, 7, 8, 9, 10};  //Bin counter pins
+
+unsigned long previousMillisSmell = 0;  
+unsigned long previousMillisRelay = 0; 
+const int testMode = 0; //0 for real operations, 1 for test mode (shorter intervals)
+unsigned long delaySmell = 5000; //Wait 5sec to spray //2000 for test
+unsigned long intervalSmell = 1500; //1.5sec to release smell//
+unsigned long disableSmell = 170000; //No odor time 170000  //10000 for test
+unsigned long delayRelay = 60000;      //Relay on delay //1min delay = 60000 // 4000 for test
+unsigned long intervalRelay = 1500000;//25min interval = 1500000 // 4000 for test
+unsigned long intervalRelayClean = 600000;//10min interval = 600000
+
+boolean smellOn = false; //Add state so cannot trigger while running
+boolean relayOn = false; //Add state so cannot trigger while running
+boolean cleaningOn = false; //Add state so cannot trigger while running cleaning
+//SETUP****************************************************SETUP//
+void setup(){
+//Indicators  
+  Serial.begin(9600);
+  pinMode(gLED, OUTPUT);
+    digitalWrite(gLED, LOW);
+  pinMode(yLED, OUTPUT);
+    digitalWrite(yLED, HIGH);
+  pinMode(rLED, OUTPUT);
+    digitalWrite(rLED, LOW);
+  pinMode(boxRelayLED, OUTPUT);
+    digitalWrite(boxRelayLED, LOW);
+//Input
+  pinMode(buttonAnalog, INPUT_PULLUP);
+  pinMode(buttonAnalog2, INPUT_PULLUP);
+//Output Actions
+  pinMode(smellOut, OUTPUT);
+    digitalWrite(smellOut, LOW);
+  pinMode(boxRelay, OUTPUT);
+    digitalWrite(boxRelay, LOW);
+//Set Up BIN Counting Pins
+  for(int i = 0; i < numPins; i++) {
+	pinMode(pins[i], OUTPUT);      }
+  for(int i = 0; i < numPins; i++) {
+	digitalWrite(pins[i], LOW);    }
+//Setup Interupt
+  attachInterrupt(buttonAnalog, interuptA, FALLING); // Interrupt is fired whenever pressure plate or button is pressed
+  Serial.println("Start program");
+//Test Mode variable changes (not used in normal use)
+if (testMode==1){
+ delaySmell = 2000; //Wait 5sec to spray //2000 for test
+ disableSmell = 10000; //No odor time 170000  //10000 for test
+ delayRelay = 4000;      //Relay on delay //3min delay = 180000 // 4000 for test
+ intervalRelay = 4000;//20min interval = 1200000 // 4000 for test
+ }
+}
+//LOOP*****************************************************LOOP//
+void loop(){
+  digitalWrite(gLED, state); //gLED press indicator (stay on or off each press)
+  
+  actionSmell(); 
+  
+  actionRelay();
+   
+  actionBinCount();
+}
+//FUNCTIONS**********************************************FUNCTIONS//
+void interuptA(){
+  if(millis() - time > debounce) {
+      count++;
+      time = millis();
+      state = !state;
+      flagSmell = HIGH; flagRelay = HIGH; flagBinCount = HIGH;
+      //previousMillisSmell = millis();  
+      //previousMillisRelay = millis();   
+      Serial.println(count);
+  }
+}
+////////////////////////////////
+void interuptB(){
+  if(millis() - time > debounce) {
+      count++;
+      time = millis();
+      state = !state;
+      flagRelayClean = HIGH;
+  }
+}
+////////////////////////////////
+void actionSmell(){
+  if(flagSmell==HIGH & smellOn==false) {        
+        previousMillisSmell = millis();
+        smellOn = true;
+  }
+  unsigned long currentMillisSmell = millis();
+  if(currentMillisSmell - previousMillisSmell >= delaySmell & smellOn == true) {
+        digitalWrite(rLED, HIGH);
+        digitalWrite(smellOut, HIGH);
+  }    
+  if(currentMillisSmell - previousMillisSmell >= delaySmell + intervalSmell) { 
+        digitalWrite(rLED, LOW);  
+        digitalWrite(smellOut, LOW);
+        digitalWrite(rLED, LOW);  
+        digitalWrite(smellOut, LOW);
+  }
+  if(currentMillisSmell - previousMillisSmell >= delaySmell+intervalSmell+disableSmell) {
+        digitalWrite(rLED, LOW);  
+        digitalWrite(smellOut, LOW);    
+        flagSmell = LOW;
+        smellOn = false;
+  }
+  //else{
+  //digitalWrite(rLED, LOW);  
+  //digitalWrite(smellOut, LOW);   
+  //}
+}
+//////////////////////////// Reference: https://www.baldengineer.com/millis-tutorial.html
+void actionRelay(){
+  if(flagRelay==HIGH & relayOn==false) {  
+        previousMillisRelay = millis();
+        relayOn=true;
+  }     
+  unsigned long currentMillisRelay = millis();
+  if(currentMillisRelay - previousMillisRelay >= delayRelay & relayOn==true) {
+        digitalWrite(boxRelay, HIGH);
+        digitalWrite(boxRelayLED, HIGH);
+  }
+  if(currentMillisRelay - previousMillisRelay >= delayRelay + intervalRelay) { 
+         //Reset Actions  
+         digitalWrite(boxRelay, LOW);
+         digitalWrite(boxRelayLED, LOW);
+         flagRelay = LOW;
+         relayOn==false;
+  }
+  //else{digitalWrite(boxRelay, LOW);
+  //     digitalWrite(boxRelayLED, LOW);}
+}
+///////////////////////////
+void actionBinCount(){
+  if(flagBinCount) { 
+      String binNumber = String(count, BIN);  
+	  int binLength = binNumber.length();/* get the length of the string */	
+	  if(count <= 31) {	// if we have less or equal to 255 presses      
+		for(int i = 0, x = 1; i < binLength; i++, x+=2) { // here is the scary code
+			if(binNumber[i] == '0') state = LOW;
+			if(binNumber[i] == '1') state = HIGH;
+			digitalWrite(pins[i] + binLength - x, state);
+		}	
+	} else {        count = 0;  //rollover
+                        for(int i = 0; i < numPins; i++) { // here is the scary code
+			digitalWrite(pins[i], LOW);
+		}	
+	//        for(int z=10;z>0;z--){
+       //               for(int i = 0; i < binLength; i++){
+       //                   digitalWrite(pins[i], HIGH);
+       //               }
+       //               delay(500);
+       //               for(int i = 0; i < binLength; i++){
+       //                   digitalWrite(pins[i], LOW);
+       //               }
+       //               delay(500);
+       //         }
+	}
+  }
+  flagBinCount = LOW;
+}
+//////////////////////////// Reference: https://www.baldengineer.com/millis-tutorial.html
+void actionRelayClean(){
+  if(flagRelayClean==HIGH) {  
+        previousMillisRelay = millis();
+        digitalWrite(boxRelay, HIGH);
+        digitalWrite(boxRelayLED, HIGH);
+        cleaningOn = true;
+  }     
+  unsigned long currentMillisRelay2 = millis();
+  if(currentMillisRelay2 - previousMillisRelay >= intervalRelayClean & cleaningOn == true) { 
+         //Reset Actions  
+         digitalWrite(boxRelay, LOW);
+         digitalWrite(boxRelayLED, LOW);
+         flagRelayClean = LOW;
+         cleaningOn==false;
+  }
+}
