@@ -1,6 +1,8 @@
 //Project: Cat Box Controller
 //Author: Alexander R Sobey
 //Date: 2016.04.23
+const int testMode = 1; //0 for real operations, 1 for test mode (shorter intervals)
+
 volatile int state = LOW;
 volatile int flagSmell = LOW;
 volatile int flagRelay = LOW;
@@ -23,7 +25,6 @@ byte pins[] = {6, 7, 8, 9, 10};  //Bin counter pins
 
 unsigned long previousMillisSmell = 0;  
 unsigned long previousMillisRelay = 0; 
-const int testMode = 0; //0 for real operations, 1 for test mode (shorter intervals)
 unsigned long delaySmell = 5000; //Wait 5sec to spray //2000 for test
 unsigned long intervalSmell = 1500; //1.5sec to release smell//
 unsigned long disableSmell = 170000; //No odor time 170000  //10000 for test
@@ -37,7 +38,6 @@ boolean cleaningOn = false; //Add state so cannot trigger while running cleaning
 //SETUP****************************************************SETUP//
 void setup(){
 //Indicators  
-  Serial.begin(9600);
   pinMode(gLED, OUTPUT);
     digitalWrite(gLED, LOW);
   pinMode(yLED, OUTPUT);
@@ -59,16 +59,19 @@ void setup(){
 	pinMode(pins[i], OUTPUT);      }
   for(int i = 0; i < numPins; i++) {
 	digitalWrite(pins[i], LOW);    }
-//Setup Interupt
-  attachInterrupt(buttonAnalog, interuptA, FALLING); // Interrupt is fired whenever pressure plate or button is pressed
-  Serial.println("Start program");
 //Test Mode variable changes (not used in normal use)
 if (testMode==1){
  delaySmell = 2000; //Wait 5sec to spray //2000 for test
  disableSmell = 10000; //No odor time 170000  //10000 for test
  delayRelay = 4000;      //Relay on delay //3min delay = 180000 // 4000 for test
- intervalRelay = 4000;//20min interval = 1200000 // 4000 for test
+ intervalRelay = 40000;//20min interval = 1200000 // 4000 for test
  }
+//Setup Interupt
+  attachInterrupt(buttonAnalog, interuptA, FALLING); // Interrupt is fired whenever pressure plate or button is pressed
+  attachInterrupt(buttonAnalog2, interuptB, FALLING); // Interrupt is fired whenever pressure plate or button is pressed
+//Initialize Serial Communication
+  Serial.begin(9600);
+  Serial.println("Start program");
 }
 //LOOP*****************************************************LOOP//
 void loop(){
@@ -79,16 +82,16 @@ void loop(){
   actionRelay();
    
   actionBinCount();
+  
+  actionRelayClean();
 }
 //FUNCTIONS**********************************************FUNCTIONS//
 void interuptA(){
-  if(millis() - time > debounce) {
+  if(millis() - time > debounce & flagSmell == LOW & flagRelay == LOW & flagBinCount == LOW) {
       count++;
       time = millis();
       state = !state;
-      flagSmell = HIGH; flagRelay = HIGH; flagBinCount = HIGH;
-      //previousMillisSmell = millis();  
-      //previousMillisRelay = millis();   
+      flagSmell = HIGH; flagRelay = HIGH; flagBinCount = HIGH; 
       Serial.println(count);
   }
 }
@@ -99,6 +102,7 @@ void interuptB(){
       time = millis();
       state = !state;
       flagRelayClean = HIGH;
+      Serial.println("cleaning the cat box");
   }
 }
 ////////////////////////////////
@@ -108,47 +112,49 @@ void actionSmell(){
         smellOn = true;
   }
   unsigned long currentMillisSmell = millis();
-  if(currentMillisSmell - previousMillisSmell >= delaySmell & smellOn == true) {
+  if(currentMillisSmell - previousMillisSmell >= delaySmell and smellOn == true) {
         digitalWrite(rLED, HIGH);
         digitalWrite(smellOut, HIGH);
-  }    
-  if(currentMillisSmell - previousMillisSmell >= delaySmell + intervalSmell) { 
+    }
+    if(currentMillisSmell - previousMillisSmell >= delaySmell + intervalSmell and smellOn == true) { 
         digitalWrite(rLED, LOW);  
         digitalWrite(smellOut, LOW);
         digitalWrite(rLED, LOW);  
         digitalWrite(smellOut, LOW);
-  }
-  if(currentMillisSmell - previousMillisSmell >= delaySmell+intervalSmell+disableSmell) {
-        digitalWrite(rLED, LOW);  
-        digitalWrite(smellOut, LOW);    
-        flagSmell = LOW;
-        smellOn = false;
-  }
-  //else{
-  //digitalWrite(rLED, LOW);  
-  //digitalWrite(smellOut, LOW);   
-  //}
+    }
+      if(currentMillisSmell - previousMillisSmell >= delaySmell+intervalSmell+disableSmell && smellOn == true) {
+          digitalWrite(rLED, LOW);  
+          digitalWrite(smellOut, LOW);    
+          flagSmell = LOW;
+          Serial.println("flagSmell:LOW");
+          smellOn = false;
+          Serial.println("smellOn:false");
+      }
+     
+  
 }
 //////////////////////////// Reference: https://www.baldengineer.com/millis-tutorial.html
 void actionRelay(){
   if(flagRelay==HIGH & relayOn==false) {  
-        previousMillisRelay = millis();
-        relayOn=true;
-  }     
-  unsigned long currentMillisRelay = millis();
-  if(currentMillisRelay - previousMillisRelay >= delayRelay & relayOn==true) {
-        digitalWrite(boxRelay, HIGH);
-        digitalWrite(boxRelayLED, HIGH);
+      previousMillisRelay = millis();
+      relayOn=true;
   }
-  if(currentMillisRelay - previousMillisRelay >= delayRelay + intervalRelay) { 
-         //Reset Actions  
-         digitalWrite(boxRelay, LOW);
-         digitalWrite(boxRelayLED, LOW);
-         flagRelay = LOW;
-         relayOn==false;
-  }
-  //else{digitalWrite(boxRelay, LOW);
-  //     digitalWrite(boxRelayLED, LOW);}
+      unsigned long currentMillisRelay = millis();
+      if((currentMillisRelay - previousMillisRelay >= delayRelay) and (relayOn==true)) {
+          digitalWrite(boxRelay, HIGH);
+          digitalWrite(boxRelayLED, HIGH);
+      }
+      if((currentMillisRelay - previousMillisRelay >= delayRelay + intervalRelay) and (relayOn==true) ) { 
+          //Reset Actions  
+             digitalWrite(boxRelay, LOW);
+             digitalWrite(boxRelayLED, LOW);
+             flagRelay = LOW;
+             Serial.println("flagRelay:LOW");
+             relayOn==false;
+             Serial.println("relayOn:false");
+          }   
+             
+  
 }
 ///////////////////////////
 void actionBinCount(){
@@ -176,8 +182,10 @@ void actionBinCount(){
        //               delay(500);
        //         }
 	}
-  }
   flagBinCount = LOW;
+  Serial.println("flagBinCount:LOW");
+  }
+  
 }
 //////////////////////////// Reference: https://www.baldengineer.com/millis-tutorial.html
 void actionRelayClean(){
