@@ -11,12 +11,11 @@ volatile int flagRelayClean = LOW;
 int count = 0;            // variable to store number of presses	
 long time = 0;	          // used for debounce
 long debounce = 500;	  // how many ms to "debounce"
-const int rLED =  P8_2;     // smellOut indicator pin
+const int rLED =  P4_3;     // smellOut indicator pin
 const int yLED = P3_7;      // program running indicator pin
 const int gLED = P4_0;      // press indicator (stays on or off
 const int buttonAnalog = P2_3;  //pressure plate and breadboard button
-const int buttonAnalog2 = P2_0;    //breadboard button for clean only
-const int smellOut = P1_6;   // release odor
+const int smellOut = P3_4;   // release odor P1_6prev
 const int boxRelay = P3_5;  // turn on automatic cleaning cat box
 const int boxRelayLED = P3_6;  //boxRelay indicator
 
@@ -48,7 +47,6 @@ void setup(){
     digitalWrite(boxRelayLED, LOW);
 //Input
   pinMode(buttonAnalog, INPUT_PULLUP);
-  pinMode(buttonAnalog2, INPUT_PULLUP);
 //Output Actions
   pinMode(smellOut, OUTPUT);
     digitalWrite(smellOut, LOW);
@@ -64,11 +62,10 @@ if (testMode==1){
  delaySmell = 2000; //Wait 5sec to spray //2000 for test
  disableSmell = 10000; //No odor time 170000  //10000 for test
  delayRelay = 4000;      //Relay on delay //3min delay = 180000 // 4000 for test
- intervalRelay = 40000;//20min interval = 1200000 // 4000 for test
+ intervalRelay = 10000;//20min interval = 1200000 // 4000 for test
  }
 //Setup Interupt
   attachInterrupt(buttonAnalog, interuptA, FALLING); // Interrupt is fired whenever pressure plate or button is pressed
-  attachInterrupt(buttonAnalog2, interuptB, FALLING); // Interrupt is fired whenever pressure plate or button is pressed
 //Initialize Serial Communication
   Serial.begin(9600);
   Serial.println("Start program");
@@ -76,14 +73,9 @@ if (testMode==1){
 //LOOP*****************************************************LOOP//
 void loop(){
   digitalWrite(gLED, state); //gLED press indicator (stay on or off each press)
-  
   actionSmell(); 
-  
-  actionRelay();
-   
+  actionRelay();  
   actionBinCount();
-  
-  actionRelayClean();
 }
 //FUNCTIONS**********************************************FUNCTIONS//
 void interuptA(){
@@ -95,66 +87,54 @@ void interuptA(){
       Serial.println(count);
   }
 }
-////////////////////////////////
-void interuptB(){
-  if(millis() - time > debounce) {
-      count++;
-      time = millis();
-      state = !state;
-      flagRelayClean = HIGH;
-      Serial.println("cleaning the cat box");
-  }
-}
-////////////////////////////////
 void actionSmell(){
-  if(flagSmell==HIGH & smellOn==false) {        
+  if(flagSmell==HIGH && smellOn==false) {        
         previousMillisSmell = millis();
         smellOn = true;
   }
   unsigned long currentMillisSmell = millis();
-  if(currentMillisSmell - previousMillisSmell >= delaySmell and smellOn == true) {
+  if(currentMillisSmell - previousMillisSmell >= delaySmell && smellOn == true) {
         digitalWrite(rLED, HIGH);
         digitalWrite(smellOut, HIGH);
     }
-    if(currentMillisSmell - previousMillisSmell >= delaySmell + intervalSmell and smellOn == true) { 
+    if(currentMillisSmell - previousMillisSmell >= delaySmell + intervalSmell && smellOn == true) { 
         digitalWrite(rLED, LOW);  
         digitalWrite(smellOut, LOW);
         digitalWrite(rLED, LOW);  
         digitalWrite(smellOut, LOW);
     }
-      if(currentMillisSmell - previousMillisSmell >= delaySmell+intervalSmell+disableSmell && smellOn == true) {
+    if(currentMillisSmell - previousMillisSmell >= delaySmell+intervalSmell+disableSmell && smellOn == true) {
           digitalWrite(rLED, LOW);  
           digitalWrite(smellOut, LOW);    
           flagSmell = LOW;
-          Serial.println("flagSmell:LOW");
+          //Serial.println("flagSmell:LOW");
           smellOn = false;
-          Serial.println("smellOn:false");
+          //Serial.println("smellOn:false");
       }
-     
-  
 }
 //////////////////////////// Reference: https://www.baldengineer.com/millis-tutorial.html
 void actionRelay(){
-  if(flagRelay==HIGH & relayOn==false) {  
-      previousMillisRelay = millis();
-      relayOn=true;
-  }
-      unsigned long currentMillisRelay = millis();
-      if((currentMillisRelay - previousMillisRelay >= delayRelay) and (relayOn==true)) {
+    unsigned long currentMillisRelay = millis();
+    if(flagRelay == HIGH && relayOn == false) {  
+          previousMillisRelay = millis();
+          relayOn=true;
+          //Serial.println("relayOn:true");
+    }    
+    if((currentMillisRelay - previousMillisRelay >= delayRelay) && relayOn == true) {
           digitalWrite(boxRelay, HIGH);
+          //Serial.println("boxRelay:HIGH");
           digitalWrite(boxRelayLED, HIGH);
-      }
-      if((currentMillisRelay - previousMillisRelay >= delayRelay + intervalRelay) and (relayOn==true) ) { 
+          //Serial.println("boxRelay:LED");
+    }
+    if((currentMillisRelay - previousMillisRelay >= delayRelay + intervalRelay) && relayOn == true) { 
           //Reset Actions  
-             digitalWrite(boxRelay, LOW);
-             digitalWrite(boxRelayLED, LOW);
-             flagRelay = LOW;
-             Serial.println("flagRelay:LOW");
-             relayOn==false;
-             Serial.println("relayOn:false");
-          }   
-             
-  
+          digitalWrite(boxRelay, LOW);
+          digitalWrite(boxRelayLED, LOW);
+          flagRelay = LOW;
+          //Serial.println("flagRelay:LOW");
+          relayOn = false;
+          //Serial.println("relayOn:false");
+          }    
 }
 ///////////////////////////
 void actionBinCount(){
@@ -171,36 +151,8 @@ void actionBinCount(){
                         for(int i = 0; i < numPins; i++) { // here is the scary code
 			digitalWrite(pins[i], LOW);
 		}	
-	//        for(int z=10;z>0;z--){
-       //               for(int i = 0; i < binLength; i++){
-       //                   digitalWrite(pins[i], HIGH);
-       //               }
-       //               delay(500);
-       //               for(int i = 0; i < binLength; i++){
-       //                   digitalWrite(pins[i], LOW);
-       //               }
-       //               delay(500);
-       //         }
 	}
   flagBinCount = LOW;
-  Serial.println("flagBinCount:LOW");
-  }
-  
-}
-//////////////////////////// Reference: https://www.baldengineer.com/millis-tutorial.html
-void actionRelayClean(){
-  if(flagRelayClean==HIGH) {  
-        previousMillisRelay = millis();
-        digitalWrite(boxRelay, HIGH);
-        digitalWrite(boxRelayLED, HIGH);
-        cleaningOn = true;
-  }     
-  unsigned long currentMillisRelay2 = millis();
-  if(currentMillisRelay2 - previousMillisRelay >= intervalRelayClean & cleaningOn == true) { 
-         //Reset Actions  
-         digitalWrite(boxRelay, LOW);
-         digitalWrite(boxRelayLED, LOW);
-         flagRelayClean = LOW;
-         cleaningOn==false;
-  }
+  //Serial.println("flagBinCount:LOW");
+  }  
 }
